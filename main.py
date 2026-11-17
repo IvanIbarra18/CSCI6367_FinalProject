@@ -38,19 +38,7 @@ def normalized_mse(original, interp):
     return error / norm
 
 def zero_pad_spectrum(F_shifted, output_shape):
-    """
-    Zero-pad a centered (fftshift-ed) spectrum of size m x n to M x N.
 
-    The low-frequency block is placed in the center of the larger array, so
-    DC stays at the center and every frequency (u, v) keeps its pair (-u, -v).
-    The new high frequencies around the border are zeros.
-
-    When m (or n) is even, the first row (or column) of the centered spectrum
-    is the Nyquist frequency -m/2. In the larger grid both -m/2 and +m/2 exist,
-    so its value is split in half between those two rows (or columns). Without
-    this split F(u, v) = F*(-u, -v) would be broken and the inverse FFT would
-    not be real.
-    """
     m, n = F_shifted.shape
     M, N = output_shape
 
@@ -237,12 +225,6 @@ show_plot("08_fft_downsampled_shifted")
 # so that F(u, v) = F*(-u, -v) still holds.
 FFT_padded_shifted = zero_pad_spectrum(FFT_down_shifted, (M, N))
 
-plt.figure(figsize=(8, 6))
-plt.imshow(np.log1p(np.abs(FFT_padded_shifted)), cmap='gray')
-plt.title('Zero-Padded Spectrum (Shifted, M x N)')
-plt.colorbar(label='Log Magnitude')
-plt.tight_layout()
-show_plot("09_zero_padded_spectrum")
 
 # Verify conjugate symmetry: F(u, v) = F*(-u, -v).
 # In unshifted indexing, -u corresponds to (-u mod M).
@@ -252,10 +234,21 @@ symmetry_error = np.max(np.abs(FFT_padded - np.conj(FFT_mirror)))
 
 print(f"Conjugate symmetry error: {symmetry_error:.12e}")
 
-# Inverse 2D FFT. Scale by (M*N)/(m*n) because numpy's ifft2 divides
-# by M*N while the spectrum came from an m*n FFT.
+# Inverse 2D FFT before amplitude scaling.
+img_interp_freq_unscaled_complex = np.fft.ifft2(FFT_padded)
+img_interp_freq_unscaled = np.real(img_interp_freq_unscaled_complex)
+
+plt.figure(figsize=(8, 6))
+plt.imshow(img_interp_freq_unscaled, cmap='gray')
+plt.title('IFFT Result Before Scaling Factor')
+plt.axis('off')
+plt.tight_layout()
+show_plot("9_ifft_before_scaling")
+
+# Scale by (M*N)/(m*n) because numpy's ifft2 divides by M*N
+# while the spectrum came from an m*n FFT.
 scale = (M * N) / (M2 * N2)
-img_interp_freq_complex = np.fft.ifft2(FFT_padded) * scale
+img_interp_freq_complex = img_interp_freq_unscaled_complex * scale
 
 # Check the imaginary component before taking the real part
 imaginary_error = np.max(np.abs(np.imag(img_interp_freq_complex)))
@@ -276,7 +269,6 @@ print(
     f"Image size frequency interpolated: "
     f"{img_interp_freq.shape[0]} x {img_interp_freq.shape[1]}"
 )
-
 
 # (5). Now you perform a spatial domain interpolation.
 # Find a function to perform a linear interpolation
